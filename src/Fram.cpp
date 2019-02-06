@@ -16,38 +16,108 @@
 //  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 //
 //  Developed by Claudio Indellicati <bitron.it@gmail.com>
+//
+//  Mod by Vitor_Boss on 01/2019
+//    work with STM32
+//    added option to use a secondary SPI
+//    added software version of SPI with programmed speed
 
 #include "Fram.h"
 
-
-#define FRAM_CMD_WREN  0x06
-#define FRAM_CMD_WRDI  0x04
-#define FRAM_CMD_READ  0x03
-#define FRAM_CMD_WRITE 0x02
-
-////////////////////////////////////////////////////////////////////////////////
+/*-----------------------------------------------------------------------------*/
 
 FramClass::FramClass()
 {
+  clkPin = mosiPin = misoPin = -1;
   csPin = FRAM_DEFAULT_CS_PIN;
-  spiSettings = FRAM_DEFAULT_SPI_SETTINGS;
+  spiSpeed = (uint32_t)CPU_CLK/FRAM_DEFAULT_CLOCK;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/*-----------------------------------------------------------------------------*/
 
-void FramClass::begin (uint8_t cp, SPISettings ss)
+FramClass::FramClass (uint8_t cp, SPIClass &_spi)
+{
+  clkPin = mosiPin = misoPin = -1;
+  csPin = cp;
+  spi = _spi;
+  spiSpeed = (uint32_t)CPU_CLK/FRAM_DEFAULT_CLOCK;
+  begin(csPin, spi);
+}
+
+/*-----------------------------------------------------------------------------*/
+
+FramClass::FramClass (uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint8_t clockspeed)
 {
   csPin = cp;
-  spiSettings = ss;
-
+  clkPin = clk;
+  misoPin = miso;
+  mosiPin = mosi;
+  spiSpeed = (uint32_t)CPU_CLK/clockspeed;
+  
   // Set CS pin HIGH and configure it as an output
-  deassertCS();
   pinMode(csPin, OUTPUT);
-
-  SPI.begin();
+  pinMode(clkPin, OUTPUT);
+  pinMode(mosiPin, OUTPUT);
+  pinMode(misoPin, INPUT_PULLUP);
+  deassertCS;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/*-----------------------------------------------------------------------------*/
+
+void FramClass::EnableWrite (boolean state)
+{
+  assertCS;
+  if (state){ Send(FRAM_CMD_WREN); }
+  else { Send(FRAM_CMD_WRDI); }
+  deassertCS;
+}
+
+/*-----------------------------------------------------------------------------*/
+
+void FramClass::setClock(uint32_t clockSpeed) {
+  spiSpeed = (uint32_t)CPU_CLK/clockSpeed;
+}
+
+
+/*-----------------------------------------------------------------------------*/
+
+void FramClass::begin (uint8_t cp, SPIClass &_spi)
+{
+  csPin = cp;
+  spi = _spi;
+  
+  // Set CS pin HIGH and configure it as an output
+  pinMode(csPin, OUTPUT);
+  deassertCS;
+  spi.begin();
+#ifdef __SAM3X8E__
+  spi.setClockDivider (9); // 9.3 MHz
+#elif defined(STM32F2XX)
+	spi.setClockDivider (SPI_CLOCK_DIV4); // SPI @ 15MHz
+#elif defined(STM32F4) || defined(ARDUINO_ARCH_STM32)
+	spi.setClockDivider (SPI_CLOCK_DIV8); // SPI @ 10MHz
+#else
+	spi.setClockDivider (SPI_CLOCK_DIV2); // 8 MHz
+#endif
+  spi.setDataMode(SPI_MODE0);
+}
+
+/*-----------------------------------------------------------------------------*/
+
+uint8_t FramClass::write (uint16_t addr, uint8_t data)
+{
+  EnableWrite(true);
+  assertCS;
+  Send(FRAM_CMD_WRITE);
+  Send16(addr);
+  Send(data);
+  deassertCS;
+  EnableWrite(false);
+
+  return 0U;
+}
+
+/*-----------------------------------------------------------------------------*/
 
 uint8_t FramClass::write (uint16_t addr, uint8_t *data, uint16_t count)
 {
@@ -55,30 +125,21 @@ uint8_t FramClass::write (uint16_t addr, uint8_t *data, uint16_t count)
     return 1U;
 
   if (count == 0U)
-    return 0U;
+    return -1;
 
-  assertCS();
-  SPI.transfer(FRAM_CMD_WREN);
-  deassertCS();
-
-  assertCS();
-
-  SPI.transfer(FRAM_CMD_WRITE);
-  SPI.transfer16(addr);
-
+  EnableWrite(true);
+  assertCS;
+  Send(FRAM_CMD_WRITE);
+  Send16(addr);
   for (uint16_t i = 0; i < count; ++i)
-    SPI.transfer(data[i]);
-
-  deassertCS();
-
-  assertCS();
-  SPI.transfer(FRAM_CMD_WRDI);
-  deassertCS();
+    Send(data[i]);
+  deassertCS;
+  EnableWrite(false);
 
   return 0U;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/*-----------------------------------------------------------------------------*/
 
 uint8_t FramClass::read (uint16_t addr, uint8_t *dataBuffer, uint16_t count)
 {
@@ -86,22 +147,98 @@ uint8_t FramClass::read (uint16_t addr, uint8_t *dataBuffer, uint16_t count)
     return 1U;
 
   if (count == 0U)
-    return 0U;
+    return -1;
 
-  assertCS();
-
-  SPI.transfer(FRAM_CMD_READ);
-  SPI.transfer16(addr);
-
+  assertCS;
+  Send(FRAM_CMD_READ);
+  Send16(addr);
   for (uint16_t i=0; i < count; ++i)
-    dataBuffer[i] = SPI.transfer(0x00);
-
-  deassertCS();
+    dataBuffer[i] = Send(0x00);
+  deassertCS;
 
   return 0U;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+/*-----------------------------------------------------------------------------*/
 
-FramClass Fram;
+uint8_t FramClass::read (uint16_t addr)
+{
+  uint8_t dataBuffer;
+
+  assertCS;
+  Send(FRAM_CMD_READ);
+  Send16(addr);
+  dataBuffer = Send(0x00);
+  deassertCS;
+
+  return dataBuffer;
+}
+
+/*-----------------------------------------------------------------------------*/
+
+uint8_t FramClass::update (uint16_t addr, uint8_t data)
+{
+  if(read(addr) != data)
+    write(addr, data);
+  return 1U;
+}
+
+/*-----------------------------------------------------------------------------*/
+
+uint8_t FramClass::readSR ()
+{
+  uint8_t dataBuffer;
+
+  assertCS;
+  Send(FRAM_CMD_RDSR);
+  dataBuffer = Send(0x00);
+  deassertCS;
+
+  return dataBuffer;
+}
+
+/*-----------------------------------------------------------------------------*/
+
+uint8_t FramClass::Send(uint8_t data) 
+{
+  if (clkPin == -1) { return spi.transfer(data); } 
+  else
+  {
+    uint8_t reply = 0;
+    for (int i=7; i>=0; i--)
+    {
+      reply <<= 1;
+      setClockPin(LOW);
+      digitalWrite(mosiPin, data & (1<<i));
+      setClockPin(HIGH);
+      reply |= digitalRead(misoPin);
+    }
+    return reply;
+  }
+}
+
+/*-----------------------------------------------------------------------------*/
+
+uint16_t FramClass::Send16(uint16_t data) 
+{
+  if (clkPin == -1) { return spi.transfer16(data); } 
+  else 
+  {
+    uint16_t reply = 0;
+    for (int i=15; i>=0; i--)
+    {
+      reply <<= 1;
+      setClockPin(LOW);
+      digitalWrite(mosiPin, data & (1<<i));
+      setClockPin(HIGH);
+      reply |= digitalRead(misoPin);
+    }
+    return reply;
+  }
+}
+
+/*-----------------------------------------------------------------------------*/
+
+
+//FramClass Fram;
 

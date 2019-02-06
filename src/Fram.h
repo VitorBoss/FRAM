@@ -23,40 +23,76 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#define FRAM_DEFAULT_CS_PIN ((uint8_t) 16)
 
-#define FRAM_DEFAULT_CS_PIN ((uint8_t) 6)
+#if defined (ARDUINO_ARCH_AVR)
+#define FRAM_DEFAULT_CLOCK       4   //value in MHz
+#else
+#define FRAM_DEFAULT_CLOCK       20  //value in MHz
+#endif
 
-#define FRAM_DEFAULT_SPI_SETTINGS SPISettings(1000000, MSBFIRST, SPI_MODE0)
+#ifndef F_CPU
+#define F_CPU   16000000  //16MHz for Atmel
+#endif
+#define CPU_CLK F_CPU/1000000 //convert MHz to single value do speed up math
 
-// MB85RS64A - 64 K (8 K x 8) bit SPI FRAM
-#define FRAM_SIZE ((uint16_t) 0x2000)
+#define SOFT_DELAY(x) do{for(uint32_t i=0;i<x;i++) {asm volatile("nop");}}while(0)
+
+
+// MB85RS64A - 256 K (32 K x 8) bit SPI FRAM
+#define FRAM_SIZE ((uint16_t) 0x8000)
+
+
+#define FRAM_CMD_WREN  0x06	//write enable
+#define FRAM_CMD_WRDI  0x04	//write disable
+#define FRAM_CMD_RDSR  0x05	//read status reg
+#define FRAM_CMD_WRSR  0x01	//write status reg
+#define FRAM_CMD_READ  0x03
+#define FRAM_CMD_WRITE 0x02
+//Not for all devices
+#define FRAM_CMD_FSTRD  0x0B	//fast read
+#define FRAM_CMD_SLEEP  0xB9	//power down
+#define FRAM_CMD_RDID  0x9F	//read JEDEC ID = Manuf+ID (suggested)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class FramClass
 {
+  public:
+    FramClass();
+    FramClass(uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint8_t clockspeed);
+    FramClass(uint8_t cp = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
+
+    void EnableWrite (boolean state);
+    void setClock(uint32_t clockSpeed);
+    void begin (uint8_t csPin = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
+    uint8_t write (uint16_t addr, uint8_t *data, uint16_t count);
+    uint8_t write (uint16_t addr, uint8_t data);
+    uint8_t read (uint16_t addr, uint8_t *dataBuffer, uint16_t count);
+    uint8_t read (uint16_t addr);
+    uint8_t update (uint16_t addr, uint8_t data);
+    uint8_t readSR ();
   private:
 
-    uint8_t csPin;
-    SPISettings spiSettings;
+    uint8_t csPin, clkPin, mosiPin, misoPin;
+    uint32_t spiSpeed;
+    SPIClass spi;
+    #define assertCS   digitalWrite(csPin, LOW);
+    #define deassertCS digitalWrite(csPin, HIGH);
+    uint8_t  Send(uint8_t data);
+    uint16_t  Send16(uint16_t data);
 
-    inline void assertCS() { SPI.beginTransaction(spiSettings); digitalWrite(csPin, LOW); };
-    inline void deassertCS() { digitalWrite(csPin, HIGH); SPI.endTransaction(); };
-
-  public:
-
-    FramClass();
-
-    void begin (uint8_t csPin = FRAM_DEFAULT_CS_PIN, SPISettings ss = FRAM_DEFAULT_SPI_SETTINGS);
-
-    uint8_t write (uint16_t addr, uint8_t *data, uint16_t count);
-    uint8_t read (uint16_t addr, uint8_t *dataBuffer, uint16_t count);
+    void setClockPin(bool state)
+    {
+        SOFT_DELAY(spiSpeed);
+        digitalWrite(clkPin, state);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern FramClass Fram;
 
+//extern FramClass Fram;
 
 #endif   // __FRAM_H__
 
