@@ -66,6 +66,7 @@ FramClass::FramClass (uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint8
 
 void FramClass::EnableWrite (boolean state)
 {
+  if (clkPin == -1) { SOFT_DELAY(spiSpeed); }
   assertCS;
   if (state){ Send(FRAM_CMD_WREN); }
   else { Send(FRAM_CMD_WRDI); }
