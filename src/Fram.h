@@ -60,7 +60,7 @@ class FramClass
 {
   public:
     FramClass();
-    FramClass(uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint8_t clockspeed);
+    FramClass(uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint32_t clockspeed);
     FramClass(uint8_t cp = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
 
     void EnableWrite (boolean state);

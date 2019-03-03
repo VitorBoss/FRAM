@@ -46,7 +46,7 @@ FramClass::FramClass (uint8_t cp, SPIClass &_spi)
 
 /*-----------------------------------------------------------------------------*/
 
-FramClass::FramClass (uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint8_t clockspeed)
+FramClass::FramClass (uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint32_t clockspeed)
 {
   csPin = cp;
   clkPin = clk;
