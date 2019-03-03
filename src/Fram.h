@@ -26,15 +26,14 @@
 #define FRAM_DEFAULT_CS_PIN ((uint8_t) 16)
 
 #if defined (ARDUINO_ARCH_AVR)
-#define FRAM_DEFAULT_CLOCK       4   //value in MHz
+#define FRAM_DEFAULT_CLOCK       4000000   //value in Hz
 #else
-#define FRAM_DEFAULT_CLOCK       20  //value in MHz
+#define FRAM_DEFAULT_CLOCK       20000000  //value in Hz
 #endif
 
 #ifndef F_CPU
 #define F_CPU   16000000  //16MHz for Atmel
 #endif
-#define CPU_CLK F_CPU/1000000 //convert MHz to single value do speed up math
 
 #define SOFT_DELAY(x) do{for(uint32_t i=0;i<x;i++) {asm volatile("nop");}}while(0)
 
@@ -52,7 +51,8 @@
 //Not for all devices
 #define FRAM_CMD_FSTRD  0x0B	//fast read
 #define FRAM_CMD_SLEEP  0xB9	//power down
-#define FRAM_CMD_RDID  0x9F	//read JEDEC ID = Manuf+ID (suggested)
+#define FRAM_CMD_RDID  0x9F	  //read JEDEC ID = Manuf+ID (suggested)
+#define FRAM_CMD_SNR  0xC3	  //Reads 8-byte serial number
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -84,8 +84,8 @@ class FramClass
 
     void setClockPin(bool state)
     {
-        SOFT_DELAY(spiSpeed);
         digitalWrite(clkPin, state);
+        SOFT_DELAY(spiSpeed);
     }
 };
 
