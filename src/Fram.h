@@ -26,21 +26,23 @@
 #define FRAM_DEFAULT_CS_PIN ((uint8_t) 16)
 
 #if defined (ARDUINO_ARCH_AVR)
-#define FRAM_DEFAULT_CLOCK       4000000   //value in Hz
+  #define FRAM_DEFAULT_CLOCK       4000000   //value in Hz
 #else
-#define FRAM_DEFAULT_CLOCK       20000000  //value in Hz
+  #define FRAM_DEFAULT_CLOCK       20000000  //value in Hz
 #endif
 
-#ifndef F_CPU
-#define F_CPU   16000000  //16MHz for Atmel
+#if !defined(ARDUINO_ARCH_STM32)
+  #ifndef F_CPU
+    #define F_CPU   16000000  //16MHz for Atmel
+  #endif
 #endif
 
 #define SOFT_DELAY(x) do{for(uint32_t i=0;i<x;i++) {asm volatile("nop");}}while(0)
 
-
 // MB85RS64A - 256 K (32 K x 8) bit SPI FRAM
 #define FRAM_SIZE ((uint16_t) 0x8000)
 
+#define FRAM_READ_ID  0x55	//dummy read bytes
 
 #define FRAM_CMD_WREN  0x06	//write enable
 #define FRAM_CMD_WRDI  0x04	//write disable
@@ -60,8 +62,8 @@ class FramClass
 {
   public:
     FramClass();
-    FramClass(uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint32_t clockspeed);
-    FramClass(uint8_t cp = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
+    FramClass(uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel = FRAM_DEFAULT_CS_PIN, uint32_t clockspeed = FRAM_DEFAULT_CLOCK);
+    FramClass(uint8_t ssel = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
 
     void EnableWrite (boolean state);
     void setClock(uint32_t clockSpeed);
@@ -91,8 +93,6 @@ class FramClass
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
-//extern FramClass Fram;
 
 #endif   // __FRAM_H__
 

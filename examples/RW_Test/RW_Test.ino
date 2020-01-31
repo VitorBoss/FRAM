@@ -1,19 +1,20 @@
 #include <Fram.h>
 
-#if defined(_VARIANT_ARDUINO_STM32_) //libmaple core
+#if defined(STM32_CORE_VERSION)
+  SPIClass spiToUse(PB5, PB4, PB3, PB0); /* SPIClass(mosi, miso, sclk, ssel = (uint8_t)NC); */
+#elif defined(STM32GENERIC)
+  SPIClass spiToUse(PB5, PB4, PB3); /* SPIClass(mosi, miso, sck) */
+#else defined(_VARIANT_ARDUINO_STM32_) //libmaple core
   SPIClass spiToUse(1);
-  //HardwareSerial Serial(USART1, PA9, PA10);
-#elif defined(ARDUINO_ARCH_STM32) //STM32Generic core
-  SPIClass spiToUse(SPI1);
 #endif
-FramClass Fram(PB0, PB3, PB4, PB5, 15);
+FramClass Fram(PB5, PB4, PB3, PB0); /* FramClass(mosi, miso, sclk, ssel = (uint8_t)NC); */
 //FramClass Fram(PB0, spiToUse);
 
 void setup()
 {
   Serial.begin(115200);
   delay(50); //ARM devices need an extra time
-  //Fram.setClock(10);
+  //Fram.setClock(10000000); /* 10MHz */
   Serial.print(("Status Register : 0x"));
   Fram.EnableWrite(true);
   Serial.println(Fram.readSR(), HEX);
@@ -26,17 +27,20 @@ void loop()
     switch(Serial.read())
     {
     case 'Q':
+    case 'q':
       {
         Serial.print(("Status Register : 0x"));
         Serial.println(Fram.readSR(), HEX);
       }
       break;
     case 'R':
+    case 'r':
       {
         //R0,100
         Serial.print(("Read "));
         int addr = Serial.parseInt();
         int len = Serial.parseInt();
+        if (len == 0) len++;
         Serial.print(("addr=0x"));
         Serial.print(addr,HEX);
         Serial.print((", len=0x"));
@@ -59,6 +63,7 @@ void loop()
       }
       break;
     case 'W':
+    case 'w':
       {
         //W0,test string[LF]
         //
@@ -78,6 +83,7 @@ void loop()
         delete [] buf;
       }
       break;
+    case 'E':
     case 'e':
       {
         //e4096

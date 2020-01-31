@@ -19,8 +19,8 @@
 //
 //  Mod by Vitor_Boss on 01/2019
 //    work with STM32
-//    added option to use a secondary SPI
-//    added software version of SPI with programmed speed
+//    added option to use any SPI port
+//    added software version of SPI with configurable speed
 
 #include "Fram.h"
 
@@ -30,29 +30,29 @@ FramClass::FramClass()
 {
   clkPin = mosiPin = misoPin = -1;
   csPin = FRAM_DEFAULT_CS_PIN;
-  spiSpeed = (uint32_t)F_CPU/FRAM_DEFAULT_CLOCK;
+  spiSpeed = (uint32_t)F_CPU / FRAM_DEFAULT_CLOCK;
 }
 
 /*-----------------------------------------------------------------------------*/
 
-FramClass::FramClass (uint8_t cp, SPIClass &_spi)
+FramClass::FramClass (uint8_t ssel, SPIClass &_spi)
 {
   clkPin = mosiPin = misoPin = -1;
-  csPin = cp;
+  csPin = ssel;
   spi = _spi;
-  spiSpeed = (uint32_t)F_CPU/FRAM_DEFAULT_CLOCK;
+  spiSpeed = (uint32_t)F_CPU / FRAM_DEFAULT_CLOCK;
   begin(csPin, spi);
 }
 
 /*-----------------------------------------------------------------------------*/
 
-FramClass::FramClass (uint8_t cp, uint8_t clk, uint8_t miso, uint8_t mosi, uint32_t clockspeed)
+FramClass::FramClass (uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel, uint32_t clockspeed)
 {
-  csPin = cp;
-  clkPin = clk;
+  csPin = ssel;
+  clkPin = sclk;
   misoPin = miso;
   mosiPin = mosi;
-  spiSpeed = (uint32_t)F_CPU/clockspeed;
+  spiSpeed = (uint32_t)F_CPU / clockspeed;
   
   // Set CS pin HIGH and configure it as an output
   pinMode(csPin, OUTPUT);
@@ -75,15 +75,15 @@ void FramClass::EnableWrite (boolean state)
 /*-----------------------------------------------------------------------------*/
 
 void FramClass::setClock(uint32_t clockSpeed) {
-  spiSpeed = (uint32_t)F_CPU/clockSpeed;
+  spiSpeed = (uint32_t)F_CPU / clockSpeed;
 }
 
 
 /*-----------------------------------------------------------------------------*/
 
-void FramClass::begin (uint8_t cp, SPIClass &_spi)
+void FramClass::begin (uint8_t ssel, SPIClass &_spi)
 {
-  csPin = cp;
+  csPin = ssel;
   spi = _spi;
   
   // Set CS pin HIGH and configure it as an output
@@ -95,7 +95,7 @@ void FramClass::begin (uint8_t cp, SPIClass &_spi)
 #elif defined(STM32F2XX)
 	spi.setClockDivider (SPI_CLOCK_DIV4); // SPI @ 15MHz
 #elif defined(STM32F4) || defined(ARDUINO_ARCH_STM32)
-	spi.setClockDivider (SPI_CLOCK_DIV8); // SPI @ 10MHz
+	spi.setClockDivider (SPI_CLOCK_DIV16);
 #else
 	spi.setClockDivider (SPI_CLOCK_DIV2); // 8 MHz
 #endif
@@ -153,7 +153,7 @@ uint8_t FramClass::read (uint16_t addr, uint8_t *dataBuffer, uint16_t count)
   Send(FRAM_CMD_READ);
   Send16(addr);
   for (uint16_t i=0; i < count; ++i)
-    dataBuffer[i] = Send(0x00);
+    dataBuffer[i] = Send(FRAM_READ_ID);
   deassertCS;
 
   return 0U;
@@ -168,7 +168,7 @@ uint8_t FramClass::read (uint16_t addr)
   assertCS;
   Send(FRAM_CMD_READ);
   Send16(addr);
-  dataBuffer = Send(0x00);
+  dataBuffer = Send(FRAM_READ_ID);
   deassertCS;
 
   return dataBuffer;
@@ -191,7 +191,7 @@ uint8_t FramClass::readSR ()
 
   assertCS;
   Send(FRAM_CMD_RDSR);
-  dataBuffer = Send(0x00);
+  dataBuffer = Send(FRAM_READ_ID);
   deassertCS;
 
   return dataBuffer;
@@ -209,7 +209,7 @@ uint8_t FramClass::Send(uint8_t data)
     {
       reply <<= 1;
       setClockPin(LOW);
-      digitalWrite(mosiPin, !!(data & (1<<i)));
+      digitalWrite(mosiPin, !!(data & ((uint16_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
@@ -229,7 +229,7 @@ uint16_t FramClass::Send16(uint16_t data)
     {
       reply <<= 1;
       setClockPin(LOW);
-      digitalWrite(mosiPin, !!(data & (1<<i)));
+      digitalWrite(mosiPin, !!(data & ((uint16_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
