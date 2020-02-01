@@ -14,10 +14,15 @@ void setup()
 {
   Serial.begin(115200);
   delay(50); //ARM devices need an extra time
-  //Fram.setClock(10000000); /* 10MHz */
-  Serial.print(("Status Register : 0x"));
-  Fram.EnableWrite(true);
-  Serial.println(Fram.readSR(), HEX);
+  Fram.EnableWrite(true); //Best way of detecting a device
+  if( (Fram.readSR()!=0) && (Fram.readSR()!=255) )
+  {
+    Serial.println(("Device found"));
+  }
+  else
+  {
+    Serial.println(("Device not found, check wiring"));
+  }
 }
 
 void loop()
@@ -29,8 +34,15 @@ void loop()
     case 'Q':
     case 'q':
       {
-        Serial.print(("Status Register : 0x"));
-        Serial.println(Fram.readSR(), HEX);
+        Fram.EnableWrite(true); //Best way of detecting a device
+        if( (Fram.readSR()!=0) && (Fram.readSR()!=255) )
+        {
+          Serial.println(("Device found"));
+        }
+        else
+        {
+          Serial.println(("Device not found, check wiring"));
+        }
       }
       break;
     case 'R':

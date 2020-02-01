@@ -30,7 +30,7 @@ FramClass::FramClass()
 {
   clkPin = mosiPin = misoPin = -1;
   csPin = FRAM_DEFAULT_CS_PIN;
-  spiSpeed = (uint32_t)F_CPU / FRAM_DEFAULT_CLOCK;
+  setClock(FRAM_DEFAULT_CLOCK);
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -40,7 +40,7 @@ FramClass::FramClass (uint8_t ssel, SPIClass &_spi)
   clkPin = mosiPin = misoPin = -1;
   csPin = ssel;
   spi = _spi;
-  spiSpeed = (uint32_t)F_CPU / FRAM_DEFAULT_CLOCK;
+  setClock(FRAM_DEFAULT_CLOCK);
   begin(csPin, spi);
 }
 
@@ -52,7 +52,7 @@ FramClass::FramClass (uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel, ui
   clkPin = sclk;
   misoPin = miso;
   mosiPin = mosi;
-  spiSpeed = (uint32_t)F_CPU / clockspeed;
+  setClock(clockspeed);
   
   // Set CS pin HIGH and configure it as an output
   pinMode(csPin, OUTPUT);
@@ -75,7 +75,7 @@ void FramClass::EnableWrite (boolean state)
 /*-----------------------------------------------------------------------------*/
 
 void FramClass::setClock(uint32_t clockSpeed) {
-  spiSpeed = (uint32_t)F_CPU / clockSpeed;
+  spiSpeed = 1000000 / (clockSpeed * 2);
 }
 
 
@@ -209,7 +209,7 @@ uint8_t FramClass::Send(uint8_t data)
     {
       reply <<= 1;
       setClockPin(LOW);
-      digitalWrite(mosiPin, !!(data & ((uint16_t)1<<i)));
+      digitalWrite(mosiPin, !!(data & ((uint8_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }

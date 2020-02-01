@@ -37,12 +37,12 @@
   #endif
 #endif
 
-#define SOFT_DELAY(x) do{for(uint32_t i=0;i<x;i++) {asm volatile("nop");}}while(0)
+#define SOFT_DELAY(x) do{for(uint32_t i=x;i>0;i--) {asm volatile("nop");}}while(0)
 
 // MB85RS64A - 256 K (32 K x 8) bit SPI FRAM
 #define FRAM_SIZE ((uint16_t) 0x8000)
 
-#define FRAM_READ_ID  0x55	//dummy read bytes
+#define FRAM_READ_ID  0xFE	//dummy bytes to make easier to sniff
 
 #define FRAM_CMD_WREN  0x06	//write enable
 #define FRAM_CMD_WRDI  0x04	//write disable
@@ -86,8 +86,8 @@ class FramClass
 
     void setClockPin(bool state)
     {
-        digitalWrite(clkPin, state);
-        SOFT_DELAY(spiSpeed);
+      digitalWrite(clkPin, state);
+      SOFT_DELAY(spiSpeed);
     }
 };
 
