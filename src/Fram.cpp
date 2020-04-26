@@ -31,6 +31,7 @@ FramClass::FramClass()
   clkPin = mosiPin = misoPin = -1;
   csPin = FRAM_DEFAULT_CS_PIN;
   setClock(FRAM_DEFAULT_CLOCK);
+  csPinInit();
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -41,7 +42,8 @@ FramClass::FramClass (uint8_t ssel, SPIClass &_spi)
   csPin = ssel;
   spi = _spi;
   setClock(FRAM_DEFAULT_CLOCK);
-  begin(csPin, spi);
+  csPinInit();
+  begin(csPin, _spi);
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -53,7 +55,18 @@ FramClass::FramClass (uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel, ui
   misoPin = miso;
   mosiPin = mosi;
   setClock(clockspeed);
-  
+  csPinInit();
+
+  if (clkPin != -1)
+  {
+    clkPort = portOutputRegister(digitalPinToPort(clkPin));
+    clkMask = digitalPinToBitMask(clkPin);
+  }
+  if (mosiPin != -1)
+  {
+    mosiPort = portOutputRegister(digitalPinToPort(mosiPin));
+    mosiMask = digitalPinToBitMask(mosiPin);
+  }
   // Set CS pin HIGH and configure it as an output
   pinMode(csPin, OUTPUT);
   pinMode(clkPin, OUTPUT);
@@ -64,20 +77,31 @@ FramClass::FramClass (uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel, ui
 
 /*-----------------------------------------------------------------------------*/
 
-void FramClass::EnableWrite (boolean state)
+void FramClass::EnableWrite (bool state, bool continuum)
 {
-  assertCS;
+  if (!continuum) assertCS;
   if (state){ Send(FRAM_CMD_WREN); }
   else { Send(FRAM_CMD_WRDI); }
-  deassertCS;
+  if (!continuum) deassertCS;
 }
 
 /*-----------------------------------------------------------------------------*/
 
 void FramClass::setClock(uint32_t clockSpeed) {
-  spiSpeed = 1000000 / (clockSpeed * 2);
+  if( clkPin == -1) { spiSpeed = 1000000 / (clockSpeed * 2); }
+  else { FRAMSettings = SPISettings(clockSpeed, MSBFIRST, SPI_MODE0); }  
 }
 
+/*-----------------------------------------------------------------------------*/
+
+bool FramClass::isDeviceActive() {
+  bool result;
+  EnableWrite(true); //Best way of detecting a device
+  char SR = readSR();
+  result = (SR!=0) && (SR!=255);
+  EnableWrite(false);
+  return result;
+}
 
 /*-----------------------------------------------------------------------------*/
 
@@ -90,29 +114,32 @@ void FramClass::begin (uint8_t ssel, SPIClass &_spi)
   pinMode(csPin, OUTPUT);
   deassertCS;
   spi.begin();
-#ifdef __SAM3X8E__
-  spi.setClockDivider (9); // 9.3 MHz
-#elif defined(STM32F2XX)
-	spi.setClockDivider (SPI_CLOCK_DIV4); // SPI @ 15MHz
-#elif defined(STM32F4) || defined(ARDUINO_ARCH_STM32)
-	spi.setClockDivider (SPI_CLOCK_DIV16);
-#else
-	spi.setClockDivider (SPI_CLOCK_DIV2); // 8 MHz
-#endif
-  spi.setDataMode(SPI_MODE0);
+  #ifdef SPI_HAS_TRANSACTION
+  spi.beginTransaction(FRAMSettings);
+  spi.endTransaction();
+  #else
+  #if defined(STM32F2)
+    spi.setClockDivider (SPI_CLOCK_DIV4); // SPI @ 15MHz
+  #elif defined(STM32F4)
+    spi.setClockDivider (SPI_CLOCK_DIV16);
+  #else
+    spi.setClockDivider (SPI_CLOCK_DIV2); // 8 MHz
+  #endif
+    spi.setDataMode(SPI_MODE0);
+  #endif
 }
 
 /*-----------------------------------------------------------------------------*/
 
 uint8_t FramClass::write (uint16_t addr, uint8_t data)
 {
-  EnableWrite(true);
   assertCS;
+  EnableWrite(true, true);
   Send(FRAM_CMD_WRITE);
   Send16(addr);
   Send(data);
+  EnableWrite(false, true);
   deassertCS;
-  EnableWrite(false);
 
   return 0U;
 }
@@ -127,14 +154,14 @@ uint8_t FramClass::write (uint16_t addr, uint8_t *data, uint16_t count)
   if (count == 0U)
     return -1;
 
-  EnableWrite(true);
   assertCS;
+  EnableWrite(true, true);
   Send(FRAM_CMD_WRITE);
   Send16(addr);
   for (uint16_t i = 0; i < count; ++i)
     Send(data[i]);
+  EnableWrite(false, true);
   deassertCS;
-  EnableWrite(false);
 
   return 0U;
 }
@@ -153,7 +180,7 @@ uint8_t FramClass::read (uint16_t addr, uint8_t *dataBuffer, uint16_t count)
   Send(FRAM_CMD_READ);
   Send16(addr);
   for (uint16_t i=0; i < count; ++i)
-    dataBuffer[i] = Send(FRAM_READ_ID);
+    dataBuffer[i] = Send(DUMMYBYTE);
   deassertCS;
 
   return 0U;
@@ -168,7 +195,7 @@ uint8_t FramClass::read (uint16_t addr)
   assertCS;
   Send(FRAM_CMD_READ);
   Send16(addr);
-  dataBuffer = Send(FRAM_READ_ID);
+  dataBuffer = Send(DUMMYBYTE);
   deassertCS;
 
   return dataBuffer;
@@ -191,7 +218,7 @@ uint8_t FramClass::readSR ()
 
   assertCS;
   Send(FRAM_CMD_RDSR);
-  dataBuffer = Send(FRAM_READ_ID);
+  dataBuffer = Send(DUMMYBYTE);
   deassertCS;
 
   return dataBuffer;
@@ -209,7 +236,8 @@ uint8_t FramClass::Send(uint8_t data)
     {
       reply <<= 1;
       setClockPin(LOW);
-      digitalWrite(mosiPin, !!(data & ((uint8_t)1<<i)));
+      FastWrite(mosiPort, mosiMask, (data & ((uint8_t)1<<i)));
+      //digitalWrite(mosiPin, !!(data & ((uint8_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
@@ -229,7 +257,8 @@ uint16_t FramClass::Send16(uint16_t data)
     {
       reply <<= 1;
       setClockPin(LOW);
-      digitalWrite(mosiPin, !!(data & ((uint16_t)1<<i)));
+      FastWrite(mosiPort, mosiMask, (data & ((uint16_t)1<<i)));
+      //digitalWrite(mosiPin, (data & ((uint16_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }

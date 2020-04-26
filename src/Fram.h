@@ -31,18 +31,12 @@
   #define FRAM_DEFAULT_CLOCK       20000000  //value in Hz
 #endif
 
-#if !defined(ARDUINO_ARCH_STM32)
-  #ifndef F_CPU
-    #define F_CPU   16000000  //16MHz for Atmel
-  #endif
-#endif
-
 #define SOFT_DELAY(x) do{for(uint32_t i=x;i>0;i--) {asm volatile("nop");}}while(0)
 
 // MB85RS64A - 256 K (32 K x 8) bit SPI FRAM
 #define FRAM_SIZE ((uint16_t) 0x8000)
 
-#define FRAM_READ_ID  0xFE	//dummy bytes to make easier to sniff
+#define DUMMYBYTE  0xFE	//dummy bytes to make easier to sniff
 
 #define FRAM_CMD_WREN  0x06	//write enable
 #define FRAM_CMD_WRDI  0x04	//write disable
@@ -56,8 +50,11 @@
 #define FRAM_CMD_RDID  0x9F	  //read JEDEC ID = Manuf+ID (suggested)
 #define FRAM_CMD_SNR  0xC3	  //Reads 8-byte serial number
 
-////////////////////////////////////////////////////////////////////////////////
+#define FastWrite(port, pin, state) { if (state == LOW) *port &= ~(pin);\
+                                      else *port |= (pin);\ 
+                                    }
 
+////////////////////////////////////////////////////////////////////////////////
 class FramClass
 {
   public:
@@ -65,7 +62,7 @@ class FramClass
     FramClass(uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel = FRAM_DEFAULT_CS_PIN, uint32_t clockspeed = FRAM_DEFAULT_CLOCK);
     FramClass(uint8_t ssel = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
 
-    void EnableWrite (boolean state);
+    void EnableWrite (bool state, bool continuum=false);
     void setClock(uint32_t clockSpeed);
     void begin (uint8_t csPin = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
     uint8_t write (uint16_t addr, uint8_t *data, uint16_t count);
@@ -74,20 +71,43 @@ class FramClass
     uint8_t read (uint16_t addr);
     uint8_t update (uint16_t addr, uint8_t data);
     uint8_t readSR ();
+    bool isDeviceActive();
   private:
 
     uint8_t csPin, clkPin, mosiPin, misoPin;
+    #if defined(ARDUINO_ARCH_STM32)
+      volatile uint32_t mosiMask, *mosiPort;
+      volatile uint32_t clkMask, *clkPort;
+      volatile uint32_t csMask, *csPort;
+    #else
+      volatile uint8_t mosiMask, *mosiPort;
+      volatile uint8_t clkMask, *clkPort;
+      volatile uint8_t csMask, *csPort;
+    #endif
     uint32_t spiSpeed;
     SPIClass spi;
-    #define assertCS   digitalWrite(csPin, LOW);
-    #define deassertCS digitalWrite(csPin, HIGH);
+    #ifdef SPI_HAS_TRANSACTION
+    SPISettings FRAMSettings;
+    #endif
+    #define assertCS   FastWrite(csPort, csMask, LOW);
+    #define deassertCS FastWrite(csPort, csMask, HIGH);
     uint8_t  Send(uint8_t data);
     uint16_t  Send16(uint16_t data);
 
     void setClockPin(bool state)
     {
-      digitalWrite(clkPin, state);
-      SOFT_DELAY(spiSpeed);
+      FastWrite(clkPort, clkMask, state);
+      #if defined(ARDUINO_ARCH_STM32)
+        delayMicroseconds(spiSpeed);
+      #else
+        SOFT_DELAY(spiSpeed);
+      #endif
+    }
+
+    void csPinInit()
+    {
+      csPort = portOutputRegister(digitalPinToPort(csPin));
+      csMask = digitalPinToBitMask(csPin);
     }
 };
 

@@ -1,28 +1,25 @@
 #include <Fram.h>
 
-#if defined(STM32_CORE_VERSION)
-  SPIClass spiToUse(PB5, PB4, PB3, PB0); /* SPIClass(mosi, miso, sclk, ssel = (uint8_t)NC); */
-#elif defined(STM32GENERIC)
-  SPIClass spiToUse(PB5, PB4, PB3); /* SPIClass(mosi, miso, sck) */
-#else defined(_VARIANT_ARDUINO_STM32_) //libmaple core
-  SPIClass spiToUse(1);
+#if defined(STM32_CORE_VERSION) || defined(STM32GENERIC)
+  SPIClass spiToUse(PB5, PB4, PB3); /* SPIClass(mosi, miso, sclk); */
+#elif defined(_VARIANT_ARDUINO_STM32_) //libmaple core
+  SPIClass spiToUse(0);
 #endif
 FramClass Fram(PB5, PB4, PB3, PB0); /* FramClass(mosi, miso, sclk, ssel = (uint8_t)NC); */
-//FramClass Fram(PB0, spiToUse);
+//FramClass Fram(PB0);
 
 void setup()
 {
   Serial.begin(115200);
-  delay(50); //ARM devices need an extra time
-  Fram.EnableWrite(true); //Best way of detecting a device
-  if( (Fram.readSR()!=0) && (Fram.readSR()!=255) )
-  {
+  Fram.setClock(1000);
+#if defined (ARDUINO_ARCH_SAMD) || (__AVR_ATmega32U4__) || defined(ARDUINO_ARCH_STM32) || defined(NRF5)
+  while (!Serial) ; // Wait for Serial monitor to open
+#endif
+  delay(150); //ARM devices need an extra time
+  if( Fram.isDeviceActive() )
     Serial.println(("Device found"));
-  }
   else
-  {
     Serial.println(("Device not found, check wiring"));
-  }
 }
 
 void loop()
@@ -34,15 +31,10 @@ void loop()
     case 'Q':
     case 'q':
       {
-        Fram.EnableWrite(true); //Best way of detecting a device
-        if( (Fram.readSR()!=0) && (Fram.readSR()!=255) )
-        {
+        if( Fram.isDeviceActive() )
           Serial.println(("Device found"));
-        }
         else
-        {
           Serial.println(("Device not found, check wiring"));
-        }
       }
       break;
     case 'R':
