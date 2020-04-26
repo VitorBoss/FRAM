@@ -17,9 +17,9 @@ void setup()
 #endif
   delay(150); //ARM devices need an extra time
   if( Fram.isDeviceActive() )
-    Serial.println(("Device found"));
+    Serial.println(F("Device found"));
   else
-    Serial.println(("Device not found, check wiring"));
+    Serial.println(F("Device not found, check wiring"));
 }
 
 void loop()
@@ -32,24 +32,24 @@ void loop()
     case 'q':
       {
         if( Fram.isDeviceActive() )
-          Serial.println(("Device found"));
+          Serial.println(F("Device found"));
         else
-          Serial.println(("Device not found, check wiring"));
+          Serial.println(F("Device not found, check wiring"));
       }
       break;
     case 'R':
     case 'r':
       {
         //R0,100
-        Serial.print(("Read "));
+        Serial.print(F("Read "));
         int addr = Serial.parseInt();
         int len = Serial.parseInt();
         if (len == 0) len++;
-        Serial.print(("addr=0x"));
+        Serial.print(F("addr=0x"));
         Serial.print(addr,HEX);
-        Serial.print((", len=0x"));
+        Serial.print(F(", len=0x"));
         Serial.print(len,HEX);
-        Serial.println((":"));
+        Serial.println(F(":"));
         uint8_t *buf = new uint8_t[len];
         Fram.read(addr,buf,len);
         for(int i = 0;i < len; i++)
@@ -62,7 +62,7 @@ void loop()
           Serial.print((char)buf[i], HEX);
         }
         Serial.println();
-        Serial.println(("OK"));
+        Serial.println(F("OK"));
         delete [] buf;
       }
       break;
@@ -71,19 +71,19 @@ void loop()
       {
         //W0,test string[LF]
         //
-        Serial.print(("Write "));
+        Serial.print(F("Write "));
         int addr = Serial.parseInt();
-        Serial.print(("0x"));
+        Serial.print(F("0x"));
         Serial.print(addr,HEX);
         Serial.read();
         uint8_t *buf = new uint8_t[256];
         uint8_t len = Serial.readBytesUntil('\n',(char*)buf,256);
-        Serial.print((",0x"));
+        Serial.print(F(",0x"));
         Serial.print(len,HEX);
-        Serial.print((": "));
+        Serial.print(F(": "));
         Fram.EnableWrite(1);
         Fram.write(addr,buf,len);
-        Serial.println(("OK"));
+        Serial.println(F("OK"));
         delete [] buf;
       }
       break;
@@ -99,15 +99,15 @@ void loop()
         if(len==0) len = 255;
         n=len;
         Fram.EnableWrite(1);
-        Serial.println(("Erasing..."));
+        Serial.println(F("Erasing..."));
         for(i = 0; i < 128; i++) 
         {
            len-=255;
            Fram.write(addr+(256*i),buf,(len<255? 255:len));
            if(len<255) break;
         }
-        Serial.print(("Erased ")); Serial.print(n); Serial.println((" bytes."));
-        Serial.println(("OK"));
+        Serial.print(F("Erased ")); Serial.print(n); Serial.println(F(" bytes."));
+        Serial.println(F("OK"));
         delete [] buf;
       }
       break;
