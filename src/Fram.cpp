@@ -23,12 +23,15 @@
 //    added software version of SPI with configurable speed
 
 #include "Fram.h"
+#ifdef SPI_HAS_TRANSACTION
+  SPISettings FRAMSettings(FRAM_DEFAULT_CLOCK, MSBFIRST, SPI_MODE0);
+#endif
 
 /*-----------------------------------------------------------------------------*/
 
 FramClass::FramClass()
 {
-  clkPin = mosiPin = misoPin = -1;
+  clkPin = mosiPin = misoPin = 255;
   csPin = FRAM_DEFAULT_CS_PIN;
   setClock(FRAM_DEFAULT_CLOCK);
   csPinInit();
@@ -38,12 +41,8 @@ FramClass::FramClass()
 
 FramClass::FramClass (uint8_t ssel, SPIClass &_spi)
 {
-  clkPin = mosiPin = misoPin = -1;
-  csPin = ssel;
-  spi = _spi;
-  setClock(FRAM_DEFAULT_CLOCK);
-  csPinInit();
-  begin(csPin, _spi);
+  clkPin = mosiPin = misoPin = 255;
+  begin(ssel, _spi);
 }
 
 /*-----------------------------------------------------------------------------*/
@@ -57,49 +56,52 @@ FramClass::FramClass (uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel, ui
   setClock(clockspeed);
   csPinInit();
 
-  if (clkPin != -1)
+  if (clkPin != 255)
   {
+    pinMode(clkPin, OUTPUT);
     clkPort = portOutputRegister(digitalPinToPort(clkPin));
     clkMask = digitalPinToBitMask(clkPin);
   }
-  if (mosiPin != -1)
+  if (mosiPin != 255)
   {
+    pinMode(mosiPin, OUTPUT);
     mosiPort = portOutputRegister(digitalPinToPort(mosiPin));
     mosiMask = digitalPinToBitMask(mosiPin);
   }
   // Set CS pin HIGH and configure it as an output
   pinMode(csPin, OUTPUT);
-  pinMode(clkPin, OUTPUT);
-  pinMode(mosiPin, OUTPUT);
   pinMode(misoPin, INPUT_PULLUP);
   deassertCS;
 }
 
 /*-----------------------------------------------------------------------------*/
 
-void FramClass::EnableWrite (bool state, bool continuum)
+void FramClass::EnableWrite (uint8_t state)
 {
-  if (!continuum) assertCS;
+  assertCS;
   if (state){ Send(FRAM_CMD_WREN); }
   else { Send(FRAM_CMD_WRDI); }
-  if (!continuum) deassertCS;
+  deassertCS;
 }
 
 /*-----------------------------------------------------------------------------*/
 
 void FramClass::setClock(uint32_t clockSpeed) {
-  if( clkPin == -1) { spiSpeed = 1000000 / (clockSpeed * 2); }
-  else { FRAMSettings = SPISettings(clockSpeed, MSBFIRST, SPI_MODE0); }  
+  spiSpeed = 1000000 / (clockSpeed * 2);
+  #ifdef SPI_HAS_TRANSACTION
+  FRAMSettings = SPISettings(clockSpeed, MSBFIRST, SPI_MODE0);
+  spi->beginTransaction(csPin, FRAMSettings);
+  #endif
 }
 
 /*-----------------------------------------------------------------------------*/
 
-bool FramClass::isDeviceActive() {
-  bool result;
-  EnableWrite(true); //Best way of detecting a device
+uint8_t FramClass::isDeviceActive() {
+  uint8_t result;
+  EnableWrite(1); //Best way of detecting a device
   char SR = readSR();
   result = (SR!=0) && (SR!=255);
-  EnableWrite(false);
+  EnableWrite(0);
   return result;
 }
 
@@ -107,39 +109,45 @@ bool FramClass::isDeviceActive() {
 
 void FramClass::begin (uint8_t ssel, SPIClass &_spi)
 {
+  clkPin = mosiPin = misoPin = 255;
   csPin = ssel;
-  spi = _spi;
+  spi = &_spi;
   
   // Set CS pin HIGH and configure it as an output
-  pinMode(csPin, OUTPUT);
+  csPinInit();
   deassertCS;
-  spi.begin();
   #ifdef SPI_HAS_TRANSACTION
-  spi.beginTransaction(FRAMSettings);
-  spi.endTransaction();
+  spi->beginTransaction(FRAMSettings);
   #else
   #if defined(STM32F2)
-    spi.setClockDivider (SPI_CLOCK_DIV4); // SPI @ 15MHz
+    spi->setClockDivider (SPI_CLOCK_DIV4); // SPI @ 15MHz
   #elif defined(STM32F4)
-    spi.setClockDivider (SPI_CLOCK_DIV16);
+    spi->setClockDivider (SPI_CLOCK_DIV16);
   #else
-    spi.setClockDivider (SPI_CLOCK_DIV2); // 8 MHz
+    spi->setClockDivider (SPI_CLOCK_DIV2); // 8 MHz
   #endif
-    spi.setDataMode(SPI_MODE0);
+    spi->setDataMode(SPI_MODE0);
+    spi->begin();
   #endif
+  delayMicroseconds(15);//>3us
 }
 
 /*-----------------------------------------------------------------------------*/
 
 uint8_t FramClass::write (uint16_t addr, uint8_t data)
 {
+  EnableWrite(1);
   assertCS;
-  EnableWrite(true, true);
   Send(FRAM_CMD_WRITE);
   Send16(addr);
   Send(data);
-  EnableWrite(false, true);
   deassertCS;
+  #if defined(ARDUINO_ARCH_STM32)
+  delayMicroseconds(5);
+  #else
+  SOFT_DELAY(5);
+  #endif
+  EnableWrite(0);
 
   return 0U;
 }
@@ -152,16 +160,21 @@ uint8_t FramClass::write (uint16_t addr, uint8_t *data, uint16_t count)
     return 1U;
 
   if (count == 0U)
-    return -1;
+    return 255;
 
+  EnableWrite(1);
   assertCS;
-  EnableWrite(true, true);
   Send(FRAM_CMD_WRITE);
   Send16(addr);
   for (uint16_t i = 0; i < count; ++i)
     Send(data[i]);
-  EnableWrite(false, true);
   deassertCS;
+  #if defined(ARDUINO_ARCH_STM32)
+  delayMicroseconds(5);
+  #else
+  SOFT_DELAY(5);
+  #endif
+  EnableWrite(0);
 
   return 0U;
 }
@@ -174,7 +187,7 @@ uint8_t FramClass::read (uint16_t addr, uint8_t *dataBuffer, uint16_t count)
     return 1U;
 
   if (count == 0U)
-    return -1;
+    return 255;
 
   assertCS;
   Send(FRAM_CMD_READ);
@@ -228,42 +241,48 @@ uint8_t FramClass::readSR ()
 
 uint8_t FramClass::Send(uint8_t data) 
 {
-  if (clkPin == -1) { return spi.transfer(data); } 
-  else
+  uint8_t reply = 0;
+  if(clkPin != 255)
   {
-    uint8_t reply = 0;
     for (int i=7; i>=0; i--)
     {
       reply <<= 1;
       setClockPin(LOW);
       FastWrite(mosiPort, mosiMask, (data & ((uint8_t)1<<i)));
-      //digitalWrite(mosiPin, !!(data & ((uint8_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
-    return reply;
   }
+#if defined(ARDUINO_ARCH_STM32)
+  else { reply = spi->transfer(csPin, data, SPI_CONTINUE); }
+#else
+  else { reply = spi->transfer(data); }
+#endif
+  return reply;
 }
 
 /*-----------------------------------------------------------------------------*/
 
 uint16_t FramClass::Send16(uint16_t data) 
 {
-  if (clkPin == -1) { return spi.transfer16(data); } 
-  else 
+  uint16_t reply = 0;
+  if(clkPin != 255)
   {
-    uint16_t reply = 0;
     for (int i=15; i>=0; i--)
     {
       reply <<= 1;
       setClockPin(LOW);
       FastWrite(mosiPort, mosiMask, (data & ((uint16_t)1<<i)));
-      //digitalWrite(mosiPin, (data & ((uint16_t)1<<i)));
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
-    return reply;
   }
+#if defined(ARDUINO_ARCH_STM32)
+  else { reply = spi->transfer16(csPin, data, SPI_CONTINUE); }
+#else
+  else { reply = spi->transfer16(data); }
+#endif
+  return reply;
 }
 
 /*-----------------------------------------------------------------------------*/

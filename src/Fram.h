@@ -50,10 +50,6 @@
 #define FRAM_CMD_RDID  0x9F	  //read JEDEC ID = Manuf+ID (suggested)
 #define FRAM_CMD_SNR  0xC3	  //Reads 8-byte serial number
 
-#define FastWrite(port, pin, state) { if (state == LOW) *port &= ~(pin);\
-                                      else *port |= (pin);\ 
-                                    }
-
 ////////////////////////////////////////////////////////////////////////////////
 class FramClass
 {
@@ -62,7 +58,7 @@ class FramClass
     FramClass(uint8_t mosi, uint8_t miso, uint8_t sclk, uint8_t ssel = FRAM_DEFAULT_CS_PIN, uint32_t clockspeed = FRAM_DEFAULT_CLOCK);
     FramClass(uint8_t ssel = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
 
-    void EnableWrite (bool state, bool continuum=false);
+    void EnableWrite (uint8_t state);
     void setClock(uint32_t clockSpeed);
     void begin (uint8_t csPin = FRAM_DEFAULT_CS_PIN, SPIClass &_spi = SPI);
     uint8_t write (uint16_t addr, uint8_t *data, uint16_t count);
@@ -71,9 +67,9 @@ class FramClass
     uint8_t read (uint16_t addr);
     uint8_t update (uint16_t addr, uint8_t data);
     uint8_t readSR ();
-    bool isDeviceActive();
-  private:
+    uint8_t isDeviceActive();
 
+  private:
     uint8_t csPin, clkPin, mosiPin, misoPin;
     #if defined(ARDUINO_ARCH_STM32)
       volatile uint32_t mosiMask, *mosiPort;
@@ -85,16 +81,23 @@ class FramClass
       volatile uint8_t csMask, *csPort;
     #endif
     uint32_t spiSpeed;
-    SPIClass spi;
-    #ifdef SPI_HAS_TRANSACTION
-    SPISettings FRAMSettings;
-    #endif
-    #define assertCS   FastWrite(csPort, csMask, LOW);
-    #define deassertCS FastWrite(csPort, csMask, HIGH);
+    SPIClass *spi;
+    #define assertCS   *csPort &= ~(csMask); //FastWrite(csPort, csMask, LOW);
+    #define deassertCS *csPort |= (csMask); //FastWrite(csPort, csMask, HIGH);
     uint8_t  Send(uint8_t data);
     uint16_t  Send16(uint16_t data);
 
-    void setClockPin(bool state)
+    #if defined(ARDUINO_ARCH_STM32)
+    inline void FastWrite(volatile uint32_t *port, uint32_t pin, int8_t state)
+    #else
+    inline void FastWrite(volatile uint8_t *port, uint8_t pin, int8_t state)
+    #endif
+    {
+      if (state == LOW) *port &= ~(pin);
+      else *port |= (pin);
+    }
+
+    inline void setClockPin(int8_t state)
     {
       FastWrite(clkPort, clkMask, state);
       #if defined(ARDUINO_ARCH_STM32)
@@ -106,11 +109,11 @@ class FramClass
 
     void csPinInit()
     {
+      pinMode(csPin, OUTPUT);
       csPort = portOutputRegister(digitalPinToPort(csPin));
       csMask = digitalPinToBitMask(csPin);
     }
 };
-
 ////////////////////////////////////////////////////////////////////////////////
 
 

@@ -5,13 +5,14 @@
 #elif defined(_VARIANT_ARDUINO_STM32_) //libmaple core
   SPIClass spiToUse(0);
 #endif
-FramClass Fram(PB5, PB4, PB3, PB0); /* FramClass(mosi, miso, sclk, ssel = (uint8_t)NC); */
+//FramClass Fram(PB5, PB4, PB3, PB0); //SoftSPI mode FramClass(mosi, miso, sclk, ssel = (uint8_t)NC);
 //FramClass Fram(PB0);
+FramClass Fram(PB0, spiToUse);
 
 void setup()
 {
   Serial.begin(115200);
-  Fram.setClock(1000);
+  Fram.setClock(100000);//debug signals
 #if defined (ARDUINO_ARCH_SAMD) || (__AVR_ATmega32U4__) || defined(ARDUINO_ARCH_STM32) || defined(NRF5)
   while (!Serial) ; // Wait for Serial monitor to open
 #endif
@@ -37,6 +38,7 @@ void loop()
           Serial.println(F("Device not found, check wiring"));
       }
       break;
+
     case 'R':
     case 'r':
       {
@@ -66,6 +68,19 @@ void loop()
         delete [] buf;
       }
       break;
+
+    case 'S':
+    case 's':
+      {
+        //R0,100
+        Serial.print(F("New speed "));
+        int speed = Serial.parseInt();
+        if (speed < 1000) { speed = 1000; }
+        Fram.setClock(speed);
+        Serial.println(speed);
+      }
+      break;
+
     case 'W':
     case 'w':
       {
@@ -81,24 +96,23 @@ void loop()
         Serial.print(F(",0x"));
         Serial.print(len,HEX);
         Serial.print(F(": "));
-        Fram.EnableWrite(1);
         Fram.write(addr,buf,len);
         Serial.println(F("OK"));
         delete [] buf;
       }
       break;
+
     case 'E':
     case 'e':
       {
         //e4096
         uint8_t *buf = new uint8_t[256];
-        for(uint8_t x = 0; x<255; x++) { buf[x]= 255; }
+        for(uint8_t x = 0; x<255; x++) { buf[x]= 0; }
         int len = Serial.parseInt();
         int addr = 0;
         int i,n;
         if(len==0) len = 255;
         n=len;
-        Fram.EnableWrite(1);
         Serial.println(F("Erasing..."));
         for(i = 0; i < 128; i++) 
         {
