@@ -107,7 +107,7 @@ void loop()
       {
         //e4096
         uint8_t *buf = new uint8_t[256];
-        for(uint8_t x = 0; x<255; x++) { buf[x]= 0; }
+        for(uint8_t x = 0; x<255; x++) { buf[x]= 255; }
         int len = Serial.parseInt();
         int addr = 0;
         int i,n;
