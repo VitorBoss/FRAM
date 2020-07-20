@@ -16,6 +16,7 @@
 //  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 //
 //  Developed by Claudio Indellicati <bitron.it@gmail.com>
+//  Added features by Vitor_Boss <vitor_boss@yahoo.com.br>
 
 #ifndef __FRAM_H__
 #define __FRAM_H__
@@ -28,7 +29,7 @@
 #if defined (ARDUINO_ARCH_AVR)
   #define FRAM_DEFAULT_CLOCK       4000000   //value in Hz
 #else
-  #define FRAM_DEFAULT_CLOCK       20000000  //value in Hz
+  #define FRAM_DEFAULT_CLOCK       15000000  //value in Hz
 #endif
 
 #define SOFT_DELAY(x) do{for(uint32_t i=x;i>0;i--) {asm volatile("nop");}}while(0)
