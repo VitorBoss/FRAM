@@ -268,6 +268,7 @@ uint8_t FramClass::Send(uint8_t data)
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
+    FastWrite(clkPort, clkMask, LOW);
   }
 #if defined(ARDUINO_ARCH_STM32)
   else { reply = spi->transfer(csPin, data, SPI_CONTINUE); }
@@ -292,6 +293,7 @@ uint16_t FramClass::Send16(uint16_t data)
       setClockPin(HIGH);
       reply |= digitalRead(misoPin);
     }
+    FastWrite(clkPort, clkMask, LOW);
   }
 #if defined(ARDUINO_ARCH_STM32)
   else { reply = spi->transfer16(csPin, data, SPI_CONTINUE); }
