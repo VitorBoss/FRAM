@@ -1,18 +1,29 @@
 #include <Fram.h>
 
 #if defined(STM32_CORE_VERSION) || defined(STM32GENERIC)
-  SPIClass spiToUse(PB5, PB4, PB3); /* SPIClass(mosi, miso, sclk); */
+  #if defined(STM32F407xx)
+    SPIClass spiToUse(PB5, PB4, PB3); /*(mosi, miso, sclk, ssel, clockspeed) 31/01/2020*/
+  #else
+    SPIClass spiToUse(PB15, PB14, PB13); //Blue/Black Pills
+  #endif
 #elif defined(_VARIANT_ARDUINO_STM32_) //libmaple core
   SPIClass spiToUse(0);
 #endif
+
+#if defined(STM32F407xx)
 //FramClass Fram(PB5, PB4, PB3, PB0); //SoftSPI mode FramClass(mosi, miso, sclk, ssel = (uint8_t)NC);
-//FramClass Fram(PB0);
+//FramClass Fram(PB0); //default SPI
 FramClass Fram(PB0, spiToUse);
+#else
+//FramClass Fram(PB15, PB14, PB13, PB12); //SoftSPI mode FramClass(mosi, miso, sclk, ssel = (uint8_t)NC);
+//FramClass Fram(PB12); //default SPI
+FramClass Fram(PB12, spiToUse);
+#endif
 
 void setup()
 {
   Serial.begin(115200);
-  Fram.setClock(100000);//debug signals
+  Fram.setClock(100000);//Set speed on the fly
 #if defined (ARDUINO_ARCH_SAMD) || (__AVR_ATmega32U4__) || defined(ARDUINO_ARCH_STM32) || defined(NRF5)
   while (!Serial) ; // Wait for Serial monitor to open
 #endif
